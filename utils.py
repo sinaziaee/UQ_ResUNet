@@ -312,7 +312,7 @@ def save_iou_dice_results_per_case(case_names, dice_list, iou_list, class_dice_l
         
 def get_last_checkpoint(model_dir="results"):
     checkpoints = sorted(os.listdir(model_dir))
-    checkpoints = [c for c in checkpoints if not c.endswith(".csv")]
+    checkpoints = [c for c in checkpoints if not c.endswith(".csv") and not c.startswith("semi")]
     checkpoints.sort()
     return os.path.join(model_dir, checkpoints[-1]) 
 
