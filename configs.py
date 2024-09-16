@@ -8,17 +8,17 @@ IMAGE_TYPE = np.float32
 MASK_TYPE = np.int8
 BATCH_SIZE = 16
 
-# base_case_dir = "C:\\datasets\\kits_test\\kits23\\raw"
-# base_processed_path_dir = "C:\\datasets\\kits_test\\kits23\\processed"
-# base_inference_dir = "C:\\datasets\\kits_test\\kits23\\inference_results"
-# base_analysis_result_dir = "C:\\src\\UQ-ResUNet\\results"
-# test_folder = "test"
+base_case_dir = "C:\\datasets\\kits_test\\kits23\\raw"
+base_processed_path_dir = "C:\\datasets\\kits_test\\kits23\\processed"
+base_inference_dir = "C:\\datasets\\kits_test\\kits23\\inference_results"
+base_analysis_result_dir = "C:\\src\\UQ-ResUNet\\results"
+test_folder = "test"
 
-base_case_dir = "/home/seyedsina.ziaee/datasets/final_kits/raw"
-base_processed_path_dir = "/home/seyedsina.ziaee/datasets/final_kits/processed"
-base_inference_dir = '/home/seyedsina.ziaee/datasets/final_kits/inference_results'
-base_analysis_result_dir = "/home/seyedsina.ziaee/datasets/UQ-ResUNet/results/"
-test_folder = "test3"
+# base_case_dir = "/home/seyedsina.ziaee/datasets/final_kits/raw"
+# base_processed_path_dir = "/home/seyedsina.ziaee/datasets/final_kits/processed"
+# base_inference_dir = '/home/seyedsina.ziaee/datasets/final_kits/inference_results'
+# base_analysis_result_dir = "/home/seyedsina.ziaee/datasets/UQ-ResUNet/results/"
+# test_folder = "test3"
 
 class MultiChannelMaskTransform:
     def __init__(self, transform):

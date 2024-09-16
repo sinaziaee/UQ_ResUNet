@@ -97,8 +97,8 @@ def main():
     preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
     kind = 'test'
     preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
-    # kind = 'test3'
-    # preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
+    kind = 'unlabeled'
+    preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
 
 if __name__ == "__main__":
     main()
