@@ -18,7 +18,7 @@ import configs as configs
 import warnings
 
 warnings.filterwarnings('ignore')
-print("semi_train.py")
+print("semi_train2.py")
 def generate_pseudo_labels(teacher_model, unlabeled_loader, device):
     teacher_model.eval()
     pseudo_labels = []
@@ -32,7 +32,7 @@ def generate_pseudo_labels(teacher_model, unlabeled_loader, device):
             pseudo_label = (outputs > 0.5).float()
             pseudo_labels.append(pseudo_label.squeeze(0).cpu())
             uncertainty_maps.append(torch.tensor(uncertainty_map).unsqueeze(0))
-            del images, segmentations
+
     return pseudo_labels, uncertainty_maps
 
 # Directories
@@ -44,7 +44,7 @@ save_path = os.path.join(configs.base_analysis_result_dir, 'semi_supervised', da
 os.makedirs(save_path, exist_ok=True)
 
 # Hyperparameters
-num_epochs = 20
+num_epochs = 50
 learning_rate = 1e-4
 validation_split = 0.2
 power = 0.9
@@ -71,8 +71,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Generate pseudo labels and uncertainty maps
 # teacher_model = ResidualUNet(in_channels=1, num_classes=4).to(device)
-last_checkpoint_dir = get_last_checkpoint(configs.base_analysis_result_dir)
-model_path = os.path.join(configs.base_analysis_result_dir, last_checkpoint_dir, 'best_model.pth')
+# last_checkpoint_dir = get_last_checkpoint(configs.base_analysis_result_dir)
+# model_path = os.path.join(configs.base_analysis_result_dir, last_checkpoint_dir, 'best_model.pth')
 model_path = "/home/seyedsina.ziaee/datasets/UQ_ResUNet/results/2024-09-16-22-04-11/checkpoint_25.pth"
 teacher_model = load_model(model_path, device)
 pseudo_labels, uncertainty_maps = generate_pseudo_labels(teacher_model, unlabeled_loader, device)
@@ -96,8 +96,8 @@ class CombinedDataset(Dataset):
             pseudo_label = self.pseudo_labels[unlabeled_idx]
             return unlabeled_image, pseudo_label
 
-combined_dataset = CombinedDataset(train_dataset, unlabeled_dataset, pseudo_labels)
-train_loader = DataLoader(combined_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
+# combined_dataset = CombinedDataset(train_dataset, unlabeled_dataset, pseudo_labels)
+# train_loader = DataLoader(combined_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
 val_loader = DataLoader(val_dataset, batch_size=configs.BATCH_SIZE, shuffle=False, num_workers=4)
 # Initialize Teacher and Student models
 student_model = ResidualUNet(in_channels=1, num_classes=4)
@@ -108,7 +108,7 @@ scheduler = PolyLRScheduler(optimizer, max_epochs=num_epochs, power=power)
 best_val_loss = float('inf')
 metrics_file_path = os.path.join(save_path, 'training_metrics.txt')
 student_model = student_model.to(device)
-print("number of batches:", len(train_loader))
+# print("number of batches:", len(train_loader))
 print("device:", device)
 with open(metrics_file_path, 'w') as f:
     f.write(f"{'Epoch':<8} | {'Time (s)':<10} | {'Train Loss':<12} | {'Val Loss':<10} | {'Val Dice':<10} | {'Val IoU':<10}\n")
@@ -117,6 +117,14 @@ with open(metrics_file_path, 'w') as f:
     
     for epoch in tqdm(range(num_epochs)):
         start_time = time.time()
+        
+        # Generate pseudo labels and uncertainty maps at the start of each epoch
+        pseudo_labels, uncertainty_maps = generate_pseudo_labels(teacher_model, unlabeled_loader, device)
+        print(f"Pseudo labels generated for epoch {epoch + 1}!")
+
+        combined_dataset = CombinedDataset(train_dataset, unlabeled_dataset, pseudo_labels)
+        train_loader = DataLoader(combined_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
+
         # Training the student model
         student_model.train()
         running_loss = 0.0

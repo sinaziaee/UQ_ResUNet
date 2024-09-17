@@ -93,7 +93,7 @@ def main():
             
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                torch.save(model.state_dict(), os.path.join(save_path, 'best_model.pth'))
+                torch.save(model.state_dict(), os.path.join(save_path, f'checkpoint_{epoch}.pth'))
                 print("Yay! Best model saved!")
 
 
