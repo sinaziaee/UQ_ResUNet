@@ -12,6 +12,7 @@ import configs
 import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
+from monai.metrics import DiceMetric
 
 
 def dice_coefficient(pred, target, smooth=1e-6):
@@ -20,6 +21,12 @@ def dice_coefficient(pred, target, smooth=1e-6):
     intersection = (pred * target).sum(dim=(2, 3))
     union = pred.sum(dim=(2, 3)) + target.sum(dim=(2, 3))
     dice = (2.0 * intersection + smooth) / (union + smooth)
+    return dice[:, 1:].mean()
+
+def dice_coefficient_monai(pred, target, include_background=False):
+    dice_metric = DiceMetric(include_background=include_background, reduction="mean")
+    pred = torch.softmax(pred, dim=1)
+    dice = dice_metric(pred, target)
     return dice.mean()
 
 # Define the IoU
@@ -29,7 +36,7 @@ def iou_coefficient(pred, target, smooth=1e-6):
     intersection = (pred * target).sum(dim=(2, 3))
     union = pred.sum(dim=(2, 3)) + target.sum(dim=(2, 3)) - intersection
     iou = (intersection + smooth) / (union + smooth)
-    return iou.mean()
+    return iou[:, 1:].mean()
 
 class MultiChannelMaskTransform:
     def __init__(self, transform):
@@ -59,6 +66,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
 
         running_loss += loss.item()
         dice_score += dice_coefficient(outputs, masks).item()
+        # dice_score += dice_coefficient_monai(outputs, masks).item()
         iou_score += iou_coefficient(outputs, masks).item()
         preds = (torch.sigmoid(outputs) > 0.5).float()
         correct += (preds == masks).sum().item()
@@ -81,13 +89,23 @@ def validate_epoch(model, dataloader, criterion, device):
     with torch.no_grad():
         for images, masks in dataloader:
             images, masks = images.to(device), masks.to(device)
-
-            outputs = model(images)
+            
+            try:
+                outputs = model(images)
+            except Exception as e:
+                print("Error ---------------------------------------------")
+                print(e)
+                print(images.shape)
+                print(masks.shape)
+                print(images.dtype)
+                print(masks.dtype)
+                continue
             
             loss = criterion(outputs, masks)
 
             running_loss += loss.item()
             dice_score += dice_coefficient(outputs, masks).item()
+            # dice_score += dice_coefficient_monai(outputs, masks).item()
             iou_score += iou_coefficient(outputs, masks).item()
             preds = (torch.sigmoid(outputs) > 0.5).float()
             correct += (preds == masks).sum().item()
@@ -168,6 +186,8 @@ def get_image_info(original_segment_dir, result_segment_dir=configs.base_inferen
     return depths, case_names, affine_matrix_list
 
 def class_specific_dice_and_iou_calculator(pred, target, smooth=1e-6):
+    dice_metric = DiceMetric(include_background=False, reduction="mean", get_not_nans=False)
+    pred_soft = torch.softmax(pred, dim=1)
     pred = torch.sigmoid(pred)
     pred = (pred > 0.5).float()
 
@@ -176,13 +196,20 @@ def class_specific_dice_and_iou_calculator(pred, target, smooth=1e-6):
 
     # We skip the background class (index 0) and calculate for kidney, tumor, and cyst
     for class_idx in range(1, pred.shape[1]):
+        pred_class = pred_soft[:, class_idx:class_idx + 1, :, :]  # Isolate the class channel
+        target_class = target[:, class_idx:class_idx + 1, :, :]  # Isolate the corresponding target class channel
+        
+        dice_metric.reset()
+        dice = dice_metric(pred_class, target_class)
+        dice_scores.append(dice.mean().item())
+
         pred_class = pred[:, class_idx, :, :]
         target_class = target[:, class_idx, :, :]
         # Dice Coefficient
         intersection = (pred_class * target_class).sum(dim=(1, 2))
-        union = pred_class.sum(dim=(1, 2)) + target_class.sum(dim=(1, 2))
-        dice = (2.0 * intersection + smooth) / (union + smooth)
-        dice_scores.append(dice.mean().item())
+        # union = pred_class.sum(dim=(1, 2)) + target_class.sum(dim=(1, 2))
+        # dice = (2.0 * intersection + smooth) / (union + smooth)
+        # dice_scores.append(dice.mean().item())
 
         # IoU Coefficient
         iou_union = pred_class.sum(dim=(1, 2)) + target_class.sum(dim=(1, 2)) - intersection

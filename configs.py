@@ -14,11 +14,18 @@ BATCH_SIZE = 16
 # base_analysis_result_dir = "C:\\src\\UQ-ResUNet\\results"
 # test_folder = "test"
 
-base_case_dir = "/home/seyedsina.ziaee/datasets/final_kits/raw"
-base_processed_path_dir = "/home/seyedsina.ziaee/datasets/final_kits/processed"
-base_inference_dir = '/home/seyedsina.ziaee/datasets/final_kits/inference_results'
-base_analysis_result_dir = "/home/seyedsina.ziaee/datasets/UQ_ResUNet/results/"
+# base_case_dir = "/home/seyedsina.ziaee/datasets/final_kits/raw"
+# base_processed_path_dir = "/home/seyedsina.ziaee/datasets/final_kits/processed"
+# base_inference_dir = '/home/seyedsina.ziaee/datasets/final_kits/inference_results'
+# base_analysis_result_dir = "/home/seyedsina.ziaee/datasets/UQ_ResUNet/results/"
+# test_folder = "test3"
+
+base_case_dir = "/scratch/student/sinaziaee/datasets/uq_project/raw"
+base_processed_path_dir = "/scratch/student/sinaziaee/datasets/uq_project/processed"
+base_inference_dir = '/scratch/student/sinaziaee/datasets/uq_project/inference_results'
+base_analysis_result_dir = "/scratch/student/sinaziaee/src/UQ_ResUNet/results/"
 test_folder = "test3"
+
 
 class MultiChannelMaskTransform:
     def __init__(self, transform):

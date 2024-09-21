@@ -36,10 +36,12 @@ def generate_pseudo_labels(teacher_model, unlabeled_loader, device):
     return pseudo_labels, uncertainty_maps
 
 # Directories
-images_dir = os.path.join(configs.base_processed_path_dir, 'train', 'images')
-segmentations_dir = os.path.join(configs.base_processed_path_dir, 'train', 'segmentations')
+images_dir = os.path.join(configs.base_processed_path_dir, 'train2', 'images')
+segmentations_dir = os.path.join(configs.base_processed_path_dir, 'train2', 'segmentations')
 unlabeled_images_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled', 'images')
+# unlabeled_images_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled2', 'images')
 unlabeled_segmentation_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled', 'segmentations')
+# unlabeled_segmentation_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled2', 'segmentations')
 save_path = os.path.join(configs.base_analysis_result_dir, 'semi_supervised', datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 os.makedirs(save_path, exist_ok=True)
 
@@ -67,15 +69,15 @@ train_dataset, val_dataset = random_split(labeled_dataset, [train_size, val_size
 unlabeled_dataset = KitsDataset(images_dir=unlabeled_images_dir, segmentations_dir=unlabeled_segmentation_dir, transform=transform)
 unlabeled_loader = DataLoader(unlabeled_dataset, batch_size=1, shuffle=False, num_workers=4)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda")
 
 # Generate pseudo labels and uncertainty maps
 # teacher_model = ResidualUNet(in_channels=1, num_classes=4).to(device)
 # last_checkpoint_dir = get_last_checkpoint(configs.base_analysis_result_dir)
 # model_path = os.path.join(configs.base_analysis_result_dir, last_checkpoint_dir, 'best_model.pth')
-model_path = "/home/seyedsina.ziaee/datasets/UQ_ResUNet/results/2024-09-16-22-04-11/checkpoint_25.pth"
+model_path = "/scratch/student/sinaziaee/src/UQ_ResUNet/results/2024-09-17-20-28-28-trained-with-diff-dice/checkpoint_49.pth"
 teacher_model = load_model(model_path, device)
-pseudo_labels, uncertainty_maps = generate_pseudo_labels(teacher_model, unlabeled_loader, device)
+# pseudo_labels, uncertainty_maps = generate_pseudo_labels(teacher_model, unlabeled_loader, device)
 print("Pseudo labels generated!")
 
 class CombinedDataset(Dataset):
@@ -107,7 +109,7 @@ optimizer = optim.Adam(student_model.parameters(), lr=learning_rate)
 scheduler = PolyLRScheduler(optimizer, max_epochs=num_epochs, power=power)
 best_val_loss = float('inf')
 metrics_file_path = os.path.join(save_path, 'training_metrics.txt')
-student_model = student_model.to(device)
+# student_model = student_model.to(device)
 # print("number of batches:", len(train_loader))
 print("device:", device)
 with open(metrics_file_path, 'w') as f:
@@ -119,13 +121,15 @@ with open(metrics_file_path, 'w') as f:
         start_time = time.time()
         
         # Generate pseudo labels and uncertainty maps at the start of each epoch
+        vram_used = torch.cuda.memory_allocated()
+        print(f"VRAM usage before generating pseudo labels: {vram_used / (1024 ** 3):.2f} GB")
         pseudo_labels, uncertainty_maps = generate_pseudo_labels(teacher_model, unlabeled_loader, device)
         print(f"Pseudo labels generated for epoch {epoch + 1}!")
-
         combined_dataset = CombinedDataset(train_dataset, unlabeled_dataset, pseudo_labels)
         train_loader = DataLoader(combined_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
 
         # Training the student model
+        student_model = student_model.to(device)
         student_model.train()
         running_loss = 0.0
         for i, (images, masks) in tqdm(enumerate(train_loader)):
@@ -162,3 +166,8 @@ with open(metrics_file_path, 'w') as f:
 
         # Step the scheduler
         scheduler.step()
+        vram_used = torch.cuda.memory_allocated()
+        print(f"VRAM usage after training : {vram_used / (1024 ** 3):.2f} GB")
+        # del train_loader
+        student_model = student_model.to('cpu')
+        del combined_dataset

@@ -36,8 +36,8 @@ def generate_pseudo_labels(teacher_model, unlabeled_loader, device):
     return pseudo_labels, uncertainty_maps
 
 # Directories
-images_dir = os.path.join(configs.base_processed_path_dir, 'train', 'images')
-segmentations_dir = os.path.join(configs.base_processed_path_dir, 'train', 'segmentations')
+images_dir = os.path.join(configs.base_processed_path_dir, 'train3', 'images')
+segmentations_dir = os.path.join(configs.base_processed_path_dir, 'train3', 'segmentations')
 unlabeled_images_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled', 'images')
 unlabeled_segmentation_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled', 'segmentations')
 save_path = os.path.join(configs.base_analysis_result_dir, 'semi_supervised', datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
@@ -73,7 +73,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # teacher_model = ResidualUNet(in_channels=1, num_classes=4).to(device)
 last_checkpoint_dir = get_last_checkpoint(configs.base_analysis_result_dir)
 model_path = os.path.join(configs.base_analysis_result_dir, last_checkpoint_dir, 'best_model.pth')
-model_path = "/home/seyedsina.ziaee/datasets/UQ_ResUNet/results/2024-09-16-22-04-11/checkpoint_25.pth"
+model_path = "/scratch/student/sinaziaee/src/UQ_ResUNet/results/2024-09-17-20-28-28-trained-with-diff-dice/checkpoint_49.pth"
 teacher_model = load_model(model_path, device)
 pseudo_labels, uncertainty_maps = generate_pseudo_labels(teacher_model, unlabeled_loader, device)
 print("Pseudo labels generated!")

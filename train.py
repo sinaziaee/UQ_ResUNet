@@ -48,7 +48,7 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=configs.BATCH_SIZE, shuffle=False, num_workers=4)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1")
     print(device)
     model = ResidualUNet(in_channels=1, num_classes=4).to(device) 
     # model = UNet(in_channels=1, num_classes=4).to(device) 

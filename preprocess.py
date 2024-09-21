@@ -93,12 +93,14 @@ def main():
         save_dir = args.dest_dir
     
     num_classes = 4
-    # kind = 'train'
+    kind = 'train3'
+    preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
+
+    # kind = 'unlabeled2'
     # preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
+
     # kind = 'test'
     # preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
-    kind = 'unlabeled'
-    preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
 
 if __name__ == "__main__":
     main()
