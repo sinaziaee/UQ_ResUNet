@@ -16,7 +16,6 @@ from utils import validate_epoch, combined_loss, ema_update, load_model, get_las
 from uncert_utils import calculate_entropy
 import configs as configs
 import warnings
-
 warnings.filterwarnings('ignore')
 print("semi_train.py")
 def generate_pseudo_labels(teacher_model, unlabeled_loader, device):

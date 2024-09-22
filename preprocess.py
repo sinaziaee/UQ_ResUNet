@@ -135,11 +135,11 @@ def main():
         save_dir = args.dest_dir
     
     num_classes = configs.NUM_CLASSES
-    kind = 'train'
-    preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
-
-    # kind = 'unlabeled2'
+    # kind = 'train'
     # preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
+
+    kind = 'unlabeled3'
+    preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)
 
     # kind = 'test'
     # preprocess_and_save(data_dir, save_dir, num_classes=num_classes, kind=kind)

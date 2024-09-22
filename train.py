@@ -77,6 +77,7 @@ def train(fold, train_images_dir, train_segmentations_dir, val_images_dir, val_s
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 torch.save(model.state_dict(), os.path.join(save_path, f'checkpoint_{epoch}.pth'))
+                torch.save(model.state_dict(), os.path.join(save_path, 'best_model.pth'))
                 print("Yay! Best model saved!")
     
     # delete the created fold data folder
