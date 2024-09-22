@@ -5,8 +5,9 @@ import torch
 
 TARGET_SHAPE = (512, 512)
 IMAGE_TYPE = np.float32
-MASK_TYPE = np.int8
+MASK_TYPE = np.uint8
 BATCH_SIZE = 16
+NUM_CLASSES = 4
 
 # base_case_dir = "C:\\datasets\\kits_test\\kits23\\raw"
 # base_processed_path_dir = "C:\\datasets\\kits_test\\kits23\\processed"

@@ -15,22 +15,17 @@ from tqdm import tqdm
 import datetime
 import time
 from utils import MultiChannelMaskTransform, PolyLRScheduler
-from utils import train_epoch, validate_epoch, combined_loss, combined_loss_monai, initialize_weights
+from utils import train_epoch, validate_epoch, combined_loss, combined_loss_monai, initialize_weights, create_fold_data
 import configs as configs
 import warnings
+import shutil
 warnings.filterwarnings('ignore')
 
-def main():
-    images_dir = os.path.join(configs.base_processed_path_dir, 'train', 'images')
-    segmentations_dir = os.path.join(configs.base_processed_path_dir, 'train', 'segmentations')
-    save_path = configs.base_analysis_result_dir
-    save_path = os.path.join(save_path, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))    
-    os.makedirs(save_path, exist_ok=True)
-    
-    num_epochs = 50  # Example: 50 epochs
-    learning_rate = 1e-4 # Base learning rate
-    validation_split = 0.2
-    power = 0.9  # Power for the polynomial decay
+def train(fold, train_images_dir, train_segmentations_dir, val_images_dir, val_segmentations_dir, save_path, params, device):
+    num_epochs = params['num_epochs']  
+    learning_rate = params['learning_rate']
+    power = params['power']
+    batch_size = params['batch_size']
 
     transform = MultiChannelMaskTransform(
         A.Compose([
@@ -40,28 +35,16 @@ def main():
         ])
     )
 
-    dataset = KitsDataset(images_dir=images_dir, segmentations_dir=segmentations_dir, transform=transform)
-    train_size = int((1 - validation_split) * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    train_dataset = KitsDataset(images_dir=train_images_dir, segmentations_dir=train_segmentations_dir, transform=transform)
+    val_dataset = KitsDataset(images_dir=val_images_dir, segmentations_dir=val_segmentations_dir, transform=transform)
     
-    train_loader = DataLoader(train_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=configs.BATCH_SIZE, shuffle=False, num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
-    device = torch.device("cuda:1")
-    print(device)
-    model = ResidualUNet(in_channels=1, num_classes=4).to(device) 
-    # model = UNet(in_channels=1, num_classes=4).to(device) 
-    # model.apply(initialize_weights)
+    model = ResidualUNet(in_channels=1, num_classes=configs.NUM_CLASSES).to(device) 
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) 
     criterion = combined_loss
-    # criterion = combined_loss_monai2
-    # criterion = nn.CrossEntropyLoss()
-    # criterion = SoftDiceLoss(apply_nonlin=torch.nn.Softmax(dim=1), batch_dice=True, do_bg=True, smooth=1.0, ddp=False)
-
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    # optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
-    # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9, weight_decay=1e-5)
 
     # Initialize PolyLRScheduler
     scheduler = PolyLRScheduler(optimizer, max_epochs=num_epochs, power=power)
@@ -95,7 +78,27 @@ def main():
                 best_val_loss = val_loss
                 torch.save(model.state_dict(), os.path.join(save_path, f'checkpoint_{epoch}.pth'))
                 print("Yay! Best model saved!")
+    
+    # delete the created fold data folder
+    shutil.rmtree(os.path.join(configs.base_processed_path_dir, fold))
+    print(f"{fold} data deleted successfully!")
 
 
 if __name__ == '__main__':
-    main()
+    fold = 'fold_1'
+    kind = 'train'
+    device = torch.device("cuda:0")
+    print(device)
+    train_images_dir, train_segmentations_dir, val_images_dir, val_segmentations_dir = create_fold_data(fold, configs.base_processed_path_dir, kind)
+    save_path = configs.base_analysis_result_dir
+    save_path = os.path.join(save_path, fold, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))  
+    os.makedirs(save_path, exist_ok=True)
+
+    params = {
+        'num_epochs': 60,
+        'learning_rate': 0.0001,
+        'power': 0.9,
+        'batch_size': configs.BATCH_SIZE
+    }
+
+    train(fold, train_images_dir, train_segmentations_dir, val_images_dir, val_segmentations_dir, save_path, params, device)

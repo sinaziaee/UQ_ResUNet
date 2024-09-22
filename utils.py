@@ -13,7 +13,8 @@ import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
 from monai.metrics import DiceMetric
-
+import shutil
+import json
 
 def dice_coefficient(pred, target, smooth=1e-6):
     pred = torch.sigmoid(pred)
@@ -360,3 +361,36 @@ def map_segmentation_to_segmentation_folder(depth_list, case_names, segment_slic
 def ema_update(teacher_model, student_model, alpha=0.99):
     for teacher_params, student_params in zip(teacher_model.parameters(), student_model.parameters()):
         teacher_params.data = alpha * teacher_params.data + (1 - alpha) * student_params.data
+
+def create_fold_data(fold, base_processed_dir, kind):
+    processed_dir = os.path.join(base_processed_dir, kind)
+    with open(os.path.join(processed_dir, 'folds_map.json'), 'r') as f:
+        folds_map = json.load(f)
+    images_dir = os.path.join(processed_dir)
+    segmentations_dir = os.path.join(processed_dir)
+    train_cases = folds_map[fold]['train']
+    val_cases = folds_map[fold]['val']
+    train_images_dir = os.path.join(base_processed_dir, fold, 'train', 'images')
+    train_segmentations_dir = os.path.join(base_processed_dir, fold, 'train', 'segmentations')
+    val_images_dir = os.path.join(base_processed_dir, fold, 'val', 'images')
+    val_segmentations_dir = os.path.join(base_processed_dir, fold, 'val', 'segmentations')
+    os.makedirs(train_images_dir, exist_ok=True)
+    os.makedirs(train_segmentations_dir, exist_ok=True)
+    os.makedirs(val_images_dir, exist_ok=True)
+    os.makedirs(val_segmentations_dir, exist_ok=True)
+    for case in tqdm(train_cases):
+        image_path_dir = os.path.join(images_dir, case, "images")
+        segmentatation_path_dir = os.path.join(segmentations_dir, case, "segmentations")
+        for image in os.listdir(image_path_dir):
+            shutil.copy(os.path.join(image_path_dir, image), os.path.join(train_images_dir, image))
+        for segmentation in os.listdir(segmentatation_path_dir):
+            shutil.copy(os.path.join(segmentatation_path_dir, segmentation), os.path.join(train_segmentations_dir, segmentation))
+    for case in tqdm(val_cases):
+        image_path_dir = os.path.join(images_dir, case, "images")
+        segmentatation_path_dir = os.path.join(segmentations_dir, case, "segmentations")
+        for image in os.listdir(os.path.join(images_dir, case, "images")):
+            shutil.copy(os.path.join(image_path_dir, image), os.path.join(val_images_dir, image))
+        for segmentation in os.listdir(os.path.join(segmentations_dir, case, "segmentations")):
+            shutil.copy(os.path.join(segmentatation_path_dir, segmentation), os.path.join(val_segmentations_dir, segmentation))
+    print(f"Data for {fold} copied successfully!")
+    return train_images_dir, train_segmentations_dir, val_images_dir, val_segmentations_dir
