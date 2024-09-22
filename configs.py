@@ -25,7 +25,7 @@ base_case_dir = "/scratch/student/sinaziaee/datasets/uq_project/raw"
 base_processed_path_dir = "/scratch/student/sinaziaee/datasets/uq_project/processed"
 base_inference_dir = '/scratch/student/sinaziaee/datasets/uq_project/inference_results'
 base_analysis_result_dir = "/scratch/student/sinaziaee/src/UQ_ResUNet/results/"
-test_folder = "test3"
+test_folder = "test"
 
 
 class MultiChannelMaskTransform:

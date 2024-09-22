@@ -15,13 +15,13 @@ def load_nifti(file_path):
     img_data = img.get_fdata()
     return img_data
 
-def one_hot_encode(mask, num_classes=4):
+def one_hot_encode(mask, num_classes=configs.NUM_CLASSES):
     one_hot_mask = np.zeros((num_classes, mask.shape[0], mask.shape[1]))
     for i in range(num_classes):
         one_hot_mask[i, :, :] = (mask == i).astype(configs.MASK_TYPE)
     return one_hot_mask
 
-def preprocess_image(image, mask, num_classes=4):
+def preprocess_image(image, mask, num_classes=configs.NUM_CLASSES):
     target_shape=configs.TARGET_SHAPE
     image = (image - np.mean(image)) / np.std(image)
     image_resized = resize(image, target_shape, mode='constant', anti_aliasing=True)
@@ -31,7 +31,7 @@ def preprocess_image(image, mask, num_classes=4):
     
     return image_resized, mask_one_hot
 
-def preprocess_image2(image, mask, num_classes=4):
+def preprocess_image2(image, mask, num_classes=configs.NUM_CLASSES):
     target_shape = configs.TARGET_SHAPE
     
     # Perform Min-Max scaling normalization

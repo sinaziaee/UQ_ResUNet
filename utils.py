@@ -162,7 +162,7 @@ def combined_loss_monai(pred, target, ce_weight=0.5, dice_weight=0.5):
     # Combine the two losses
     return ce_weight * ce_loss_value + dice_weight * d_loss
 
-def load_model(model_path, device, in_channels=1, num_classes=4):
+def load_model(model_path, device, in_channels=1, num_classes=configs.NUM_CLASSES):
     model = ResidualUNet(in_channels=in_channels, num_classes=num_classes).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
     model.eval()

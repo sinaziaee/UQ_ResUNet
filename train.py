@@ -85,9 +85,9 @@ def train(fold, train_images_dir, train_segmentations_dir, val_images_dir, val_s
 
 
 if __name__ == '__main__':
-    fold = 'fold_1'
+    fold = 'fold_4'
     kind = 'train'
-    device = torch.device("cuda:0")
+    device = torch.device("cuda:1")
     print(device)
     train_images_dir, train_segmentations_dir, val_images_dir, val_segmentations_dir = create_fold_data(fold, configs.base_processed_path_dir, kind)
     save_path = configs.base_analysis_result_dir

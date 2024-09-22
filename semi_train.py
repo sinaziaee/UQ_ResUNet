@@ -70,7 +70,7 @@ unlabeled_loader = DataLoader(unlabeled_dataset, batch_size=1, shuffle=False, nu
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Generate pseudo labels and uncertainty maps
-# teacher_model = ResidualUNet(in_channels=1, num_classes=4).to(device)
+# teacher_model = ResidualUNet(in_channels=1, num_classes=configs.NUM_CLASSES).to(device)
 last_checkpoint_dir = get_last_checkpoint(configs.base_analysis_result_dir)
 model_path = os.path.join(configs.base_analysis_result_dir, last_checkpoint_dir, 'best_model.pth')
 model_path = "/scratch/student/sinaziaee/src/UQ_ResUNet/results/2024-09-17-20-28-28-trained-with-diff-dice/checkpoint_49.pth"
@@ -100,7 +100,7 @@ combined_dataset = CombinedDataset(train_dataset, unlabeled_dataset, pseudo_labe
 train_loader = DataLoader(combined_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
 val_loader = DataLoader(val_dataset, batch_size=configs.BATCH_SIZE, shuffle=False, num_workers=4)
 # Initialize Teacher and Student models
-student_model = ResidualUNet(in_channels=1, num_classes=4)
+student_model = ResidualUNet(in_channels=1, num_classes=configs.NUM_CLASSES)
 student_model.load_state_dict(teacher_model.state_dict())  # Copy teacher weights to student
 # Optimizer and Scheduler
 optimizer = optim.Adam(student_model.parameters(), lr=learning_rate)
