@@ -358,9 +358,12 @@ def map_segmentation_to_segmentation_folder(depth_list, case_names, segment_slic
         counter += d
     return None
 
-def ema_update(teacher_model, student_model, alpha=0.99):
-    for teacher_params, student_params in zip(teacher_model.parameters(), student_model.parameters()):
-        teacher_params.data = alpha * teacher_params.data + (1 - alpha) * student_params.data
+def ema_update(teacher_models, student_model, alpha=0.99):
+    for i, teacher_model in enumerate(teacher_models):
+        for teacher_params, student_params in zip(teacher_model.parameters(), student_model.parameters()):
+            teacher_params.data = alpha * teacher_params.data + (1 - alpha) * student_params.data
+        teacher_models[i] = teacher_model
+    return teacher_models
 
 def create_fold_data(fold, base_processed_dir, kind):
     processed_dir = os.path.join(base_processed_dir, kind)
@@ -394,3 +397,24 @@ def create_fold_data(fold, base_processed_dir, kind):
             shutil.copy(os.path.join(segmentatation_path_dir, segmentation), os.path.join(val_segmentations_dir, segmentation))
     print(f"Data for {fold} copied successfully!")
     return train_images_dir, train_segmentations_dir, val_images_dir, val_segmentations_dir
+
+def create_semi_train_data(kind):
+    base_processed_dir = configs.base_processed_path_dir
+    dest_images_dir = os.path.join(base_processed_dir, "semi_train", 'images')
+    dest_segments_dir = os.path.join(base_processed_dir, "semi_train", 'segmentations')
+
+    # create folders temporary
+    os.makedirs(dest_images_dir, exist_ok=True)
+    os.makedirs(dest_segments_dir, exist_ok=True)
+
+    base_src_cases_dir = os.path.join(base_processed_dir, kind)
+    for case_name in sorted(os.listdir(base_src_cases_dir)):
+        if case_name.startswith("case"):
+            image_path = os.path.join(base_src_cases_dir, case_name, 'images')
+            mask_path = os.path.join(base_src_cases_dir, case_name, 'segmentations')
+            for image_name in sorted(os.listdir(image_path)):
+                shutil.copy(os.path.join(image_path, image_name), os.path.join(dest_images_dir, image_name))
+            for mask_name in os.listdir(mask_path):
+                shutil.copy(os.path.join(mask_path, mask_name), os.path.join(dest_segments_dir, mask_name))
+    
+    return dest_images_dir, dest_segments_dir

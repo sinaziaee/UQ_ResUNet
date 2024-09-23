@@ -33,10 +33,10 @@ class KitsDataset(Dataset):
         return image, mask
 
 class CombinedDataset(KitsDataset):
-    def __init__(self, labeled_dataset, unlabeled_dataset, pseudo_labels):
+    def __init__(self, labeled_dataset, unlabeled_dataset, pseudo_labels_dataset):
         self.labeled_dataset = labeled_dataset
         self.unlabeled_dataset = unlabeled_dataset
-        self.pseudo_labels = pseudo_labels
+        self.pseudo_labels_dataset = pseudo_labels_dataset
 
     def __len__(self):
         return len(self.labeled_dataset) + len(self.unlabeled_dataset)
@@ -47,5 +47,5 @@ class CombinedDataset(KitsDataset):
         else:
             unlabeled_idx = idx - len(self.labeled_dataset)
             unlabeled_image = self.unlabeled_dataset[unlabeled_idx]
-            pseudo_label = self.pseudo_labels[unlabeled_idx]
-            return unlabeled_image, pseudo_label
+            pseudo_label = self.pseudo_labels_dataset[unlabeled_idx]
+            return unlabeled_image[0], pseudo_label[1]

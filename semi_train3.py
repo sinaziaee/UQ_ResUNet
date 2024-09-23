@@ -12,201 +12,134 @@ from tqdm import tqdm
 import datetime
 import time
 from utils import MultiChannelMaskTransform, PolyLRScheduler
-from utils import validate_epoch, combined_loss, ema_update, load_model, get_last_checkpoint
-from uncert_utils import calculate_entropy, calculate_ece, find_teacher_models_pahts, load_teacher_models
+from utils import validate_epoch, combined_loss, ema_update, load_model, get_last_checkpoint, create_semi_train_data
+from uncert_utils import find_teacher_models_pahts, load_teacher_models, teachers_perdict, teachers_predict2
 import configs as configs
 import warnings
 import numpy as np
+import matplotlib.pyplot as plt
+import shutil
+
 warnings.filterwarnings('ignore')
 print("semi_train3.py")
 
+def train(train_kind, save_path, params, val_base_dir, unlabeled_base_dir):
+    os.makedirs(save_path, exist_ok=True)
+    # Hyperparameters
+    num_epochs = params["num_epochs"]
+    learning_rate = params["learning_rate"]
+    power = params["power"]
+    batch_size = params["batch_size"]
+    transform = params["transform"]
 
-def generate_pseudo_labels(teacher_models, unlabeled_loader, device):
-    pseudo_labels = []
-    uncertainty_maps = []
+    labeled_images_dir, labeled_segmentations_dir = create_semi_train_data(train_kind)
+    print("Finished Creating temporary semi_train data")
+    val_images_dir, val_segmentations_dir = os.path.join(val_base_dir, 'images'), os.path.join(val_base_dir, 'segmentations')
+    unlabeled_images_dir, unlabeled_segmentation_dir = os.path.join(unlabeled_base_dir, 'images'), os.path.join(unlabeled_base_dir, 'segmentations')
+    teacher_models_paths = find_teacher_models_pahts()
+    teacher_models = load_teacher_models(teacher_models_paths)
+    device = torch.device("cuda")
 
-    with torch.no_grad():
-        cpu_device = torch.device("cpu")
-        all_models_image_outputs = []
-        for teacher_model in teacher_models:
-            teacher_model.eval()
-            teacher_model.to(device)
-            model_image_outputs = []
-            for images, segmentations in tqdm(unlabeled_loader):
-                images = images.to(device)
-                outputs = teacher_model(images)
-                outputs = torch.nn.functional.softmax(outputs, dim=1)  # Apply softmax to get class probabilities
-                model_image_outputs.append(outputs.cpu().numpy())
-            all_models_image_outputs.append(np.stack(model_image_outputs))  # Stack outputs for each model
-            # unloading the model from the GPU
-            teacher_model.to(cpu_device)
-        all_models_image_outputs = np.stack(all_models_image_outputs)
-
-    for i, (model_outputs_for_image, labels_for_image) in enumerate(zip(all_models_image_outputs, segmentations)):
-        # model_outputs_for_image: shape (num_models, num_classes, channels, height, width)
-
-        # Calculate uncertainty map (using entropy across channels)
-        uncertainty_map = calculate_entropy(model_outputs_for_image)  # shape (height, width)
+    unlabeled_dataset = KitsDataset(images_dir=unlabeled_images_dir, segmentations_dir=unlabeled_segmentation_dir, transform=transform)
+    unlabeled_loader = DataLoader(unlabeled_dataset, batch_size=1, shuffle=False, num_workers=4)
+    valid_dataset = KitsDataset(images_dir=val_images_dir, segmentations_dir=val_segmentations_dir, transform=transform)
+    labeled_dataset = KitsDataset(images_dir=labeled_images_dir, segmentations_dir=labeled_segmentations_dir, transform=transform)
+    teacher_model = teacher_models[1]
+    val_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    student_model = ResidualUNet(in_channels=1, num_classes=configs.NUM_CLASSES)
+    student_model.load_state_dict(teacher_model.state_dict())  # Copy teacher weights to student
+    optimizer = optim.Adam(student_model.parameters(), lr=learning_rate)
+    scheduler = PolyLRScheduler(optimizer, max_epochs=num_epochs, power=power)
+    best_val_loss = float('inf')
+    metrics_file_path = os.path.join(save_path, 'training_metrics.txt')
+    student_model = student_model.to(device)
+    print("device:", device)
+    with open(metrics_file_path, 'w') as f:
+        f.write(f"{'Epoch':<8} | {'Time (s)':<10} | {'Train Loss':<12} | {'Val Loss':<10} | {'Val Dice':<10} | {'Val IoU':<10}\n")
+        f.write("-" * 120 + "\n")
+        f.flush()
         
-        # Calculate ECE (Expected Calibration Error) across channels
-        ece = calculate_ece(model_outputs_for_image, labels_for_image)  # scalar value
-        
-        # Now you have `uncertainty_map` for the image and ECE value for evaluation
-        print(f"Image {i} - ECE: {ece}")
-    # return pseudo_labels, uncertainty_maps
-
-
-# Directories
-images_dir = os.path.join(configs.base_processed_path_dir, 'train', 'images')
-segmentations_dir = os.path.join(configs.base_processed_path_dir, 'train', 'segmentations')
-# unlabeled_images_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled', 'images')
-unlabeled_images_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled3', 'images')
-# unlabeled_segmentation_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled', 'segmentations')
-unlabeled_segmentation_dir = os.path.join(configs.base_processed_path_dir, 'unlabeled3', 'segmentations')
-
-transform = MultiChannelMaskTransform(
-    A.Compose([
-        A.GaussianBlur(p=0.3),
-        A.Normalize(mean=(0.0,), std=(1.0,)),
-        ToTensorV2()
-    ])
-)
-
-unlabeled_dataset = KitsDataset(images_dir=unlabeled_images_dir, segmentations_dir=unlabeled_segmentation_dir, transform=transform)
-unlabeled_loader = DataLoader(unlabeled_dataset, batch_size=1, shuffle=False, num_workers=4)
-
-teacher_models_paths = find_teacher_models_pahts()
-teacher_models = load_teacher_models(teacher_models_paths)
-device = torch.device("cuda")
-generate_pseudo_labels(teacher_models, unlabeled_loader, device)
-
-
-# save_path = os.path.join(configs.base_analysis_result_dir, 'semi_supervised', datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
-# os.makedirs(save_path, exist_ok=True)
-
-# # Hyperparameters
-# num_epochs = 50
-# learning_rate = 1e-4
-# validation_split = 0.2
-# power = 0.9
-
-# # Transformations
-# transform = MultiChannelMaskTransform(
-#     A.Compose([
-#         A.GaussianBlur(p=0.3),
-#         A.Normalize(mean=(0.0,), std=(1.0,)),
-#         ToTensorV2()
-#     ])
-# )
-
-# # Dataset and DataLoader
-# labeled_dataset = KitsDataset(images_dir=images_dir, segmentations_dir=segmentations_dir, transform=transform)
-# train_size = int((1 - validation_split) * len(labeled_dataset))
-# val_size = len(labeled_dataset) - train_size
-# train_dataset, val_dataset = random_split(labeled_dataset, [train_size, val_size])
-
-# unlabeled_dataset = KitsDataset(images_dir=unlabeled_images_dir, segmentations_dir=unlabeled_segmentation_dir, transform=transform)
-# unlabeled_loader = DataLoader(unlabeled_dataset, batch_size=1, shuffle=False, num_workers=4)
-
-# device = torch.device("cuda")
-
-# # Generate pseudo labels and uncertainty maps
-# # teacher_model = ResidualUNet(in_channels=1, num_classes=configs.NUM_CLASSES).to(device)
-# # last_checkpoint_dir = get_last_checkpoint(configs.base_analysis_result_dir)
-# # model_path = os.path.join(configs.base_analysis_result_dir, last_checkpoint_dir, 'best_model.pth')
-# model_path = "/scratch/student/sinaziaee/src/UQ_ResUNet/results/2024-09-17-20-28-28-trained-with-diff-dice/checkpoint_49.pth"
-# teacher_model = load_model(model_path, device)
-# # pseudo_labels, uncertainty_maps = generate_pseudo_labels(teacher_model, unlabeled_loader, device)
-# print("Pseudo labels generated!")
-
-# class CombinedDataset(Dataset):
-#     def __init__(self, labeled_dataset, unlabeled_dataset, pseudo_labels):
-#         self.labeled_dataset = labeled_dataset
-#         self.unlabeled_dataset = unlabeled_dataset
-#         self.pseudo_labels = pseudo_labels
-
-#     def __len__(self):
-#         return len(self.labeled_dataset) + len(self.unlabeled_dataset)
-
-#     def __getitem__(self, idx):
-#         if idx < len(self.labeled_dataset):
-#             return self.labeled_dataset[idx]
-#         else:
-#             unlabeled_idx = idx - len(self.labeled_dataset)
-#             unlabeled_image = self.unlabeled_dataset[unlabeled_idx][0]
-#             pseudo_label = self.pseudo_labels[unlabeled_idx]
-#             return unlabeled_image, pseudo_label
-
-# # combined_dataset = CombinedDataset(train_dataset, unlabeled_dataset, pseudo_labels)
-# # train_loader = DataLoader(combined_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
-# val_loader = DataLoader(val_dataset, batch_size=configs.BATCH_SIZE, shuffle=False, num_workers=4)
-# # Initialize Teacher and Student models
-# student_model = ResidualUNet(in_channels=1, num_classes=configs.NUM_CLASSES)
-# student_model.load_state_dict(teacher_model.state_dict())  # Copy teacher weights to student
-# # Optimizer and Scheduler
-# optimizer = optim.Adam(student_model.parameters(), lr=learning_rate)
-# scheduler = PolyLRScheduler(optimizer, max_epochs=num_epochs, power=power)
-# best_val_loss = float('inf')
-# metrics_file_path = os.path.join(save_path, 'training_metrics.txt')
-# # student_model = student_model.to(device)
-# # print("number of batches:", len(train_loader))
-# print("device:", device)
-# with open(metrics_file_path, 'w') as f:
-#     f.write(f"{'Epoch':<8} | {'Time (s)':<10} | {'Train Loss':<12} | {'Val Loss':<10} | {'Val Dice':<10} | {'Val IoU':<10}\n")
-#     f.write("-" * 120 + "\n")
-#     f.flush()
-    
-#     for epoch in tqdm(range(num_epochs)):
-#         start_time = time.time()
-        
-#         # Generate pseudo labels and uncertainty maps at the start of each epoch
-#         vram_used = torch.cuda.memory_allocated()
-#         print(f"VRAM usage before generating pseudo labels: {vram_used / (1024 ** 3):.2f} GB")
-#         pseudo_labels, uncertainty_maps = generate_pseudo_labels(teacher_model, unlabeled_loader, device)
-#         print(f"Pseudo labels generated for epoch {epoch + 1}!")
-#         combined_dataset = CombinedDataset(train_dataset, unlabeled_dataset, pseudo_labels)
-#         train_loader = DataLoader(combined_dataset, batch_size=configs.BATCH_SIZE, shuffle=True, num_workers=4)
-
-#         # Training the student model
-#         student_model = student_model.to(device)
-#         student_model.train()
-#         running_loss = 0.0
-#         for i, (images, masks) in tqdm(enumerate(train_loader)):
-#             # print(len(images), len(masks))
-#             images, masks = images.to(device), masks.to(device)
-#             optimizer.zero_grad()
+        for epoch in tqdm(range(num_epochs)):
+            start_time = time.time()
+            pseudo_labels_dir, ece_scores, entropy_scores = teachers_predict2(teacher_models, unlabeled_loader, device)
+            # del unlabeled_loader
+            # for teacher_model in teacher_models:
+            #     teacher_model = teacher_model.to('cpu')
             
-#             student_outputs = student_model(images)
-#             supervised_loss = combined_loss(student_outputs, masks)
+            print(f"Pseudo labels generated for epoch {epoch + 1}!")
+            pseudo_labels_dataset = KitsDataset(images_dir=unlabeled_images_dir, segmentations_dir=pseudo_labels_dir, transform=transform)
+            combined_dataset = CombinedDataset(labeled_dataset, unlabeled_dataset, pseudo_labels_dataset)
+            train_loader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+
+            # Training the student model
+            student_model = student_model.to(device)
+            student_model.train()
+            running_loss = 0.0
+            for i, (images, masks) in tqdm(enumerate(train_loader)):
+                images, masks = images.to(device), masks.to(device)
+                optimizer.zero_grad()
+                
+                student_outputs = student_model(images)
+                supervised_loss = combined_loss(student_outputs, masks)
+                
+                loss = supervised_loss
+                loss.backward()
+                optimizer.step()
+
+                running_loss += loss.item()
+
+            # Validation
+            val_loss, val_acc, val_dice, val_iou = validate_epoch(student_model, val_loader, combined_loss, device)
+
+            epoch_time = time.time() - start_time
+            f.write(f"{epoch+1:<8} | {epoch_time:<10.2f} | {running_loss/len(train_loader):<12.4f} | {val_loss:<10.4f} | {val_dice:<10.4f} | {val_iou:<10.4f}\n")
+            f.flush()
+
+            print(f"Epoch {epoch+1}/{num_epochs} - Time: {epoch_time:.2f} sec")
+            print(f"Train Loss: {running_loss/len(train_loader):.4f}, Val Loss: {val_loss:.4f}, Val Dice: {val_dice:.4f}, Val IoU: {val_iou:.4f}")
             
-#             loss = supervised_loss
-#             loss.backward()
-#             optimizer.step()
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                torch.save(student_model.state_dict(), os.path.join(save_path, 'best_student_model.pth'))
+                print("Best student model saved!")
+            
+            # Update teacher models with EMA
+            teacher_models = ema_update(teacher_models, student_model.to('cpu'))
+            # Step the scheduler
+            scheduler.step()
+            # del train_loader
+            student_model = student_model.to('cpu')
+            del combined_dataset
+            del pseudo_labels_dataset
+    shutil.rmtree(os.path.join(configs.base_processed_path_dir, "semi_train"))
+    shutil.rmtree(os.path.join(configs.base_processed_path_dir, "pseudo_labels"))
 
-#             running_loss += loss.item()
 
-#         # Validation
-#         val_loss, val_acc, val_dice, val_iou = validate_epoch(student_model, val_loader, combined_loss, device)
+if __name__ == "__main__":
 
-#         epoch_time = time.time() - start_time
-#         f.write(f"{epoch+1:<8} | {epoch_time:<10.2f} | {running_loss/len(train_loader):<12.4f} | {val_loss:<10.4f} | {val_dice:<10.4f} | {val_iou:<10.4f}\n")
-#         f.flush()
+    save_path = os.path.join(configs.base_analysis_result_dir, 'semi_supervised', datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    train_kind = "train"
+    unlabeled_kind = "unlabeled"
+    # Hyperparameters
+    num_epochs = 50
+    learning_rate = 1e-4
+    power = 0.9
+    batch_size = configs.BATCH_SIZE
+    transform = MultiChannelMaskTransform(
+        A.Compose([
+            A.GaussianBlur(p=0.3),    
+            A.Normalize(mean=(0.0,), std=(1.0,)),  
+            ToTensorV2()
+        ])
+    )
+    params = {
+        "num_epochs": num_epochs,
+        "learning_rate": learning_rate,
+        "power": power,
+        "batch_size": batch_size,
+        "transform": transform
+    }
+    val_base_dir = os.path.join(configs.base_processed_path_dir, 'valid')
+    unlabeled_base_dir = os.path.join(configs.base_processed_path_dir, unlabeled_kind)
 
-#         print(f"Epoch {epoch+1}/{num_epochs} - Time: {epoch_time:.2f} sec")
-#         print(f"Train Loss: {running_loss/len(train_loader):.4f}, Val Loss: {val_loss:.4f}, Val Dice: {val_dice:.4f}, Val IoU: {val_iou:.4f}")
-        
-#         if val_loss < best_val_loss:
-#             best_val_loss = val_loss
-#             torch.save(student_model.state_dict(), os.path.join(save_path, 'best_student_model.pth'))
-#             print("Best student model saved!")
-        
-#         # Update teacher model with EMA
-#         ema_update(teacher_model, student_model)
-
-#         # Step the scheduler
-#         scheduler.step()
-#         vram_used = torch.cuda.memory_allocated()
-#         print(f"VRAM usage after training : {vram_used / (1024 ** 3):.2f} GB")
-#         # del train_loader
-#         student_model = student_model.to('cpu')
-#         del combined_dataset
+    train(train_kind, save_path, params, val_base_dir, unlabeled_base_dir)
